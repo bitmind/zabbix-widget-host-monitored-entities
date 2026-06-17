@@ -1,17 +1,23 @@
 /*
-** Host Items State Widget for Zabbix 7.0
-** Displays count by state (Normal / Not supported / Disabled) for Items, Triggers or Discovery rules.
+** Host Monitoring Entities Widget for Zabbix 7.0
+** Displays count by state for Items, Triggers or Discovery rules on a given host.
 */
 
 class CWidgetHostItemsState extends CWidget {
 
-	static GRAPH_TYPE_PIE = 1;
+	static GRAPH_TYPE_PIE            = 1;
 	static GRAPH_TYPE_HORIZONTAL_BAR = 2;
-	static GRAPH_TYPE_VERTICAL_BAR = 3;
+	static GRAPH_TYPE_VERTICAL_BAR   = 3;
 
 	static SOURCE_ITEMS     = 1;
 	static SOURCE_TRIGGERS  = 2;
 	static SOURCE_DISCOVERY = 3;
+
+	static LEGEND_NONE   = 0;
+	static LEGEND_TOP    = 1;
+	static LEGEND_BOTTOM = 2;
+	static LEGEND_LEFT   = 3;
+	static LEGEND_RIGHT  = 4;
 
 	static ANIM_DURATION = 550;
 
@@ -41,7 +47,8 @@ class CWidgetHostItemsState extends CWidget {
 			counts:      response.counts,
 			hostid:      response.hostid,
 			graph_type:  response.graph_type,
-			show_legend: response.show_legend,
+			show_total:  response.show_total,
+			legend_pos:  response.legend_pos,
 			show_links:  response.show_links
 		};
 
@@ -108,6 +115,14 @@ class CWidgetHostItemsState extends CWidget {
 		return key;
 	}
 
+	#sourceName() {
+		switch (this.#chart_data.source) {
+			case CWidgetHostItemsState.SOURCE_TRIGGERS:  return t('Triggers');
+			case CWidgetHostItemsState.SOURCE_DISCOVERY: return t('Discovery rules');
+			default:                                     return t('Items');
+		}
+	}
+
 	// ---------------------------------------------------------------------------
 	// Navigation
 	// ---------------------------------------------------------------------------
@@ -116,7 +131,6 @@ class CWidgetHostItemsState extends CWidget {
 		const { hostid, show_links, source } = this.#chart_data;
 		if (!show_links || !hostid) return null;
 
-		// filter_hostids[0]=<id>  (URL-encoded brackets)
 		const host_filter = '&filter_hostids%5B0%5D=' + encodeURIComponent(hostid);
 
 		switch (source) {
@@ -163,7 +177,7 @@ class CWidgetHostItemsState extends CWidget {
 		this._body.innerHTML = '';
 		this.#hideTooltip();
 
-		const { counts, graph_type, show_legend } = this.#chart_data;
+		const { counts, graph_type, legend_pos } = this.#chart_data;
 		const states = this.#getStates();
 		const total  = states.reduce((s, st) => s + (counts[st.key] || 0), 0);
 
@@ -172,8 +186,14 @@ class CWidgetHostItemsState extends CWidget {
 			return;
 		}
 
-		// Vertical bar uses side-by-side layout (bar left, legend right).
-		const side_legend = (graph_type === CWidgetHostItemsState.GRAPH_TYPE_VERTICAL_BAR && show_legend);
+		const NONE  = CWidgetHostItemsState.LEGEND_NONE;
+		const TOP   = CWidgetHostItemsState.LEGEND_TOP;
+		const LEFT  = CWidgetHostItemsState.LEGEND_LEFT;
+		const RIGHT = CWidgetHostItemsState.LEGEND_RIGHT;
+
+		const has_legend  = legend_pos !== NONE;
+		const side_legend = (legend_pos === LEFT || legend_pos === RIGHT);
+		const leg_first   = (legend_pos === TOP || legend_pos === LEFT);
 
 		const wrapper = document.createElement('div');
 		wrapper.style.cssText = 'width:100%;height:100%;display:flex;'
@@ -181,13 +201,20 @@ class CWidgetHostItemsState extends CWidget {
 
 		const chart_area = document.createElement('div');
 		chart_area.style.cssText = side_legend
-			? 'flex:0 0 40%;min-width:48px;position:relative;'
+			? 'flex:1;min-width:0;position:relative;'
 			: 'flex:1;min-height:0;position:relative;';
 
-		wrapper.appendChild(chart_area);
-
-		if (show_legend) {
-			wrapper.appendChild(this.#renderLegend(counts, states, side_legend));
+		if (has_legend) {
+			const legend_el = this.#renderLegend(counts, states, side_legend);
+			if (leg_first) {
+				wrapper.appendChild(legend_el);
+				wrapper.appendChild(chart_area);
+			} else {
+				wrapper.appendChild(chart_area);
+				wrapper.appendChild(legend_el);
+			}
+		} else {
+			wrapper.appendChild(chart_area);
 		}
 
 		this._body.appendChild(wrapper);
@@ -223,7 +250,6 @@ class CWidgetHostItemsState extends CWidget {
 		const r_in  = r_out * 0.58;
 		const GAP   = total > 1 ? 1.5 : 0;
 
-		// Pre-calculate segments.
 		const segs = [];
 		let angle = 0;
 		for (const state of states) {
@@ -237,32 +263,34 @@ class CWidgetHostItemsState extends CWidget {
 		const paths_g = this.#svgEl('g');
 		svg.appendChild(paths_g);
 
-		// Centre label — fades in at end of animation.
+		// Centre label group — fades in at end of animation.
 		const ctr_g = this.#svgEl('g');
 		ctr_g.setAttribute('pointer-events', 'none');
 		ctr_g.style.opacity = '0';
 		svg.appendChild(ctr_g);
 
-		const fs_big = Math.max(13, Math.round(r_in * 0.42));
-		const fs_sm  = Math.max(10, Math.round(r_in * 0.22));
+		if (this.#chart_data.show_total) {
+			const fs_big = Math.max(13, Math.round(r_in * 0.42));
+			const fs_sm  = Math.max(10, Math.round(r_in * 0.22));
 
-		const mk_txt = (x, y, fs, bold, fill, content) => {
-			const el = this.#svgEl('text');
-			el.setAttribute('x', x);
-			el.setAttribute('y', y);
-			el.setAttribute('text-anchor', 'middle');
-			el.setAttribute('dominant-baseline', 'middle');
-			el.setAttribute('font-size', fs);
-			if (bold) el.setAttribute('font-weight', 'bold');
-			el.setAttribute('fill', fill);
-			el.textContent = content;
-			return el;
-		};
+			const mk_txt = (x, y, fs, bold, fill, content) => {
+				const el = this.#svgEl('text');
+				el.setAttribute('x', x);
+				el.setAttribute('y', y);
+				el.setAttribute('text-anchor', 'middle');
+				el.setAttribute('dominant-baseline', 'middle');
+				el.setAttribute('font-size', fs);
+				if (bold) el.setAttribute('font-weight', 'bold');
+				el.setAttribute('fill', fill);
+				el.textContent = content;
+				return el;
+			};
 
-		ctr_g.appendChild(mk_txt(cx, cy - fs_sm * 0.7, fs_big, true,
-			'var(--color-text-primary,#eee)', total));
-		ctr_g.appendChild(mk_txt(cx, cy + fs_big * 0.6, fs_sm, false,
-			'var(--color-text-secondary,#aaa)', t('total')));
+			ctr_g.appendChild(mk_txt(cx, cy - fs_sm * 0.7, fs_big, true,
+				'var(--color-text-primary,#eee)', total));
+			ctr_g.appendChild(mk_txt(cx, cy + fs_big * 0.6, fs_sm, false,
+				'var(--color-text-secondary,#aaa)', this.#sourceName()));
+		}
 
 		container.appendChild(svg);
 
@@ -292,9 +320,11 @@ class CWidgetHostItemsState extends CWidget {
 				drawn += seg.sweep;
 			}
 
-			ctr_g.style.opacity = progress > 0.7
-				? Math.min(1, (progress - 0.7) / 0.3).toFixed(3)
-				: '0';
+			if (this.#chart_data.show_total) {
+				ctr_g.style.opacity = progress > 0.7
+					? Math.min(1, (progress - 0.7) / 0.3).toFixed(3)
+					: '0';
+			}
 		};
 
 		this.#do_animate
@@ -307,17 +337,33 @@ class CWidgetHostItemsState extends CWidget {
 	// ---------------------------------------------------------------------------
 
 	#renderHorizontalBar(container, width, height, counts, total, states) {
+		const show_total = this.#chart_data.show_total;
+		const LABEL_H    = show_total ? 18 : 0;
+
 		const svg   = this.#makeSvg(width, height);
 		const PAD_H = 16;
-		const bar_h = Math.min(44, Math.round(height * 0.35));
-		const bar_y = Math.round((height - bar_h) / 2);
+		const bar_h = Math.min(44, Math.round((height - LABEL_H) * 0.4));
+		const bar_y = Math.round(LABEL_H + (height - LABEL_H - bar_h) / 2);
 		const bar_w = width - PAD_H * 2;
+
+		if (show_total) {
+			const lbl = this.#svgEl('text');
+			lbl.setAttribute('x', width / 2);
+			lbl.setAttribute('y', LABEL_H / 2);
+			lbl.setAttribute('text-anchor', 'middle');
+			lbl.setAttribute('dominant-baseline', 'middle');
+			lbl.setAttribute('font-size', 11);
+			lbl.setAttribute('fill', 'var(--color-text-secondary,#aaa)');
+			lbl.setAttribute('pointer-events', 'none');
+			lbl.textContent = `${total} ${this.#sourceName()}`;
+			svg.appendChild(lbl);
+		}
 
 		const { clip_rect } = this.#makeClipRect(svg, PAD_H, bar_y, 0, bar_h);
 		const g = this.#svgEl('g');
 		g.setAttribute('clip-path', `url(#${clip_rect._clip_id})`);
 
-		const texts = [];
+		const inline_texts = [];
 		let x = PAD_H;
 
 		for (const state of states) {
@@ -346,7 +392,7 @@ class CWidgetHostItemsState extends CWidget {
 				txt.setAttribute('pointer-events', 'none');
 				txt.style.opacity = '0';
 				g.appendChild(txt);
-				texts.push(txt);
+				inline_texts.push(txt);
 			}
 
 			x += seg_w;
@@ -357,7 +403,7 @@ class CWidgetHostItemsState extends CWidget {
 
 		const draw = (p) => {
 			clip_rect.setAttribute('width', Math.round(bar_w * p));
-			texts.forEach(el => {
+			inline_texts.forEach(el => {
 				el.style.opacity = Math.max(0, (p - 0.6) / 0.4).toFixed(3);
 			});
 		};
@@ -368,21 +414,38 @@ class CWidgetHostItemsState extends CWidget {
 	}
 
 	// ---------------------------------------------------------------------------
-	// Vertical stacked bar (single bar)  — bottom-to-top reveal
+	// Vertical stacked bar (single)  — bottom-to-top reveal
 	// ---------------------------------------------------------------------------
 
 	#renderVerticalBar(container, width, height, counts, total, states) {
+		const show_total = this.#chart_data.show_total;
+		const LABEL_H    = show_total ? 18 : 0;
+
 		const svg     = this.#makeSvg(width, height);
 		const PAD_V   = 8;
 		const bar_w   = Math.min(80, Math.round((width - 16) * 0.72));
 		const bar_x   = Math.round((width - bar_w) / 2);
-		const chart_h = height - PAD_V * 2;
+		const chart_y = PAD_V + LABEL_H;
+		const chart_h = height - PAD_V * 2 - LABEL_H;
 
-		const { clip_rect } = this.#makeClipRect(svg, bar_x, PAD_V + chart_h, bar_w, 0);
+		if (show_total) {
+			const lbl = this.#svgEl('text');
+			lbl.setAttribute('x', width / 2);
+			lbl.setAttribute('y', PAD_V + LABEL_H / 2);
+			lbl.setAttribute('text-anchor', 'middle');
+			lbl.setAttribute('dominant-baseline', 'middle');
+			lbl.setAttribute('font-size', 11);
+			lbl.setAttribute('fill', 'var(--color-text-secondary,#aaa)');
+			lbl.setAttribute('pointer-events', 'none');
+			lbl.textContent = `${total} ${this.#sourceName()}`;
+			svg.appendChild(lbl);
+		}
+
+		const { clip_rect } = this.#makeClipRect(svg, bar_x, chart_y + chart_h, bar_w, 0);
 		const g = this.#svgEl('g');
 		g.setAttribute('clip-path', `url(#${clip_rect._clip_id})`);
 
-		let y = PAD_V;
+		let y = chart_y;
 		for (const state of states) {
 			const count = counts[state.key] || 0;
 			if (count === 0) continue;
@@ -406,7 +469,7 @@ class CWidgetHostItemsState extends CWidget {
 
 		const draw = (p) => {
 			const h = Math.round(chart_h * p);
-			clip_rect.setAttribute('y', PAD_V + chart_h - h);
+			clip_rect.setAttribute('y', chart_y + chart_h - h);
 			clip_rect.setAttribute('height', h);
 		};
 
@@ -416,51 +479,64 @@ class CWidgetHostItemsState extends CWidget {
 	}
 
 	// ---------------------------------------------------------------------------
-	// Legend
+	// Legend  (side = Left/Right → vertical+centered; else = Top/Bottom → horizontal row)
 	// ---------------------------------------------------------------------------
 
-	#renderLegend(counts, states, side = false) {
+	#renderLegend(counts, states, side) {
 		const legend = document.createElement('div');
+
 		if (side) {
-			// Vertical bar: legend fills the right column, items centered vertically.
-			legend.style.cssText = 'flex:1;display:flex;flex-direction:column;justify-content:center;'
-				+ 'padding:8px 14px;gap:6px;min-width:0;';
+			legend.style.cssText = [
+				'flex:0 0 auto',
+				'display:flex',
+				'flex-direction:column',
+				'justify-content:center',
+				'gap:6px',
+				'padding:6px 14px',
+				'min-width:120px'
+			].join(';');
 		} else {
-			// Pie / horizontal bar: legend is a footer strip below the chart.
-			legend.style.cssText = 'padding:6px 14px 4px;display:flex;flex-direction:column;gap:3px;';
+			legend.style.cssText = [
+				'flex:0 0 auto',
+				'display:flex',
+				'flex-direction:row',
+				'flex-wrap:wrap',
+				'align-items:center',
+				'gap:3px 12px',
+				'padding:4px 14px'
+			].join(';');
 		}
 
 		for (const state of states) {
 			const count = counts[state.key] || 0;
 			const url   = this.#listUrl(state.key);
 
-			const inner = url ? document.createElement('a') : document.createElement('div');
-			if (url) {
-				inner.href = url;
-				inner.style.cssText = 'display:flex;align-items:center;gap:8px;'
-					+ 'text-decoration:none;color:inherit;cursor:pointer;';
-			} else {
-				inner.style.cssText = 'display:flex;align-items:center;gap:8px;';
-			}
+			const item = url ? document.createElement('a') : document.createElement('div');
+			let item_css = 'display:flex;align-items:center;gap:6px;';
+			if (url) item_css += 'text-decoration:none;color:inherit;cursor:pointer;';
+			if (side) item_css += 'min-width:0;';
+			item.style.cssText = item_css;
+			if (url) item.href = url;
 
 			const swatch = document.createElement('span');
-			swatch.style.cssText = `width:10px;height:10px;border-radius:2px;`
+			swatch.style.cssText = `width:9px;height:9px;border-radius:2px;`
 				+ `background:${state.color};flex-shrink:0;`;
 
 			const label_el = document.createElement('span');
-			label_el.style.cssText = 'font-size:13px;flex:1;overflow:hidden;'
-				+ 'text-overflow:ellipsis;white-space:nowrap;';
+			label_el.style.cssText = side
+				? 'font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
+				: 'font-size:12px;white-space:nowrap;';
 			label_el.textContent = this.#stateLabel(state.key);
 
 			const count_el = document.createElement('span');
-			count_el.style.cssText = 'font-size:13px;font-weight:600;'
-				+ 'margin-left:auto;padding-left:12px;flex-shrink:0;';
+			count_el.style.cssText = 'font-size:12px;font-weight:600;'
+				+ (side ? 'margin-left:auto;padding-left:8px;flex-shrink:0;' : 'margin-left:2px;');
 			count_el.textContent = count;
 
-			inner.appendChild(swatch);
-			inner.appendChild(label_el);
-			inner.appendChild(count_el);
-			legend.appendChild(inner);
+			item.appendChild(swatch);
+			item.appendChild(label_el);
+			item.appendChild(count_el);
+			legend.appendChild(item);
 		}
 
 		return legend;
@@ -556,7 +632,7 @@ class CWidgetHostItemsState extends CWidget {
 
 		const tick = (now) => {
 			const t     = Math.min((now - start) / duration, 1);
-			const eased = 1 - Math.pow(1 - t, 3); // cubic ease-out
+			const eased = 1 - Math.pow(1 - t, 3);
 			callback(eased);
 			this.#anim_id = t < 1 ? requestAnimationFrame(tick) : null;
 		};
@@ -584,12 +660,8 @@ class CWidgetHostItemsState extends CWidget {
 		return svg;
 	}
 
-	/**
-	 * Creates <defs><clipPath><rect/></clipPath></defs> in svg.
-	 * The returned rect carries ._clip_id for url() reference.
-	 */
 	#makeClipRect(svg, x, y, w, h) {
-		const clip_id   = 'his-clip-' + Math.random().toString(36).slice(2);
+		const clip_id   = 'hme-clip-' + Math.random().toString(36).slice(2);
 		const defs      = this.#svgEl('defs');
 		const clip      = this.#svgEl('clipPath');
 		const clip_rect = this.#svgEl('rect');

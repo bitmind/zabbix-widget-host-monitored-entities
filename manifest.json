@@ -2,7 +2,7 @@
 	"manifest_version": 2.0,
 	"id": "hostitemsstate",
 	"type": "widget",
-	"name": "Host items state",
+	"name": "Host monitoring entities",
 	"namespace": "HostItemsState",
 	"version": "1.0",
 	"description": "Displays the item count by state (Normal, Not supported, Disabled) for a given host.",

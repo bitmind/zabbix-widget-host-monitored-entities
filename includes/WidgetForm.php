@@ -54,7 +54,16 @@ class WidgetForm extends CWidgetForm {
 				]))->setDefault(Widget::GRAPH_TYPE_PIE)
 			)
 			->addField(
-				(new CWidgetFieldCheckBox('show_legend', _('Show legend')))->setDefault(1)
+				(new CWidgetFieldCheckBox('show_total', _('Show total count')))->setDefault(1)
+			)
+			->addField(
+				(new CWidgetFieldRadioButtonList('legend_pos', _('Show legend'), [
+					Widget::LEGEND_NONE   => _('None'),
+					Widget::LEGEND_TOP    => _('Top'),
+					Widget::LEGEND_BOTTOM => _('Bottom'),
+					Widget::LEGEND_LEFT   => _('Left'),
+					Widget::LEGEND_RIGHT  => _('Right')
+				]))->setDefault(Widget::LEGEND_BOTTOM)
 			)
 			->addField(
 				new CWidgetFieldCheckBox('show_links', _('Enable links to configuration page'))

@@ -14,8 +14,14 @@ class Widget extends CWidget {
 	public const SOURCE_TRIGGERS  = 2;
 	public const SOURCE_DISCOVERY = 3;
 
+	public const LEGEND_NONE   = 0;
+	public const LEGEND_TOP    = 1;
+	public const LEGEND_BOTTOM = 2;
+	public const LEGEND_LEFT   = 3;
+	public const LEGEND_RIGHT  = 4;
+
 	public function getDefaultName(): string {
-		return _('Host items state');
+		return _('Host monitoring entities');
 	}
 
 	public function getTranslationStrings(): array {

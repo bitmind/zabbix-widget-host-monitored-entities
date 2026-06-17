@@ -18,7 +18,10 @@
 		new CWidgetFieldRadioButtonListView($data['fields']['graph_type'])
 	)
 	->addField(
-		new CWidgetFieldCheckBoxView($data['fields']['show_legend'])
+		new CWidgetFieldCheckBoxView($data['fields']['show_total'])
+	)
+	->addField(
+		new CWidgetFieldRadioButtonListView($data['fields']['legend_pos'])
 	)
 	->addField(
 		new CWidgetFieldCheckBoxView($data['fields']['show_links'])

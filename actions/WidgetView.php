@@ -16,7 +16,8 @@ class WidgetView extends CControllerDashboardWidgetView {
 		$vars = [
 			'source'      => $source,
 			'graph_type'  => $this->fields_values['graph_type'],
-			'show_legend' => (bool) $this->fields_values['show_legend'],
+			'show_total'  => (bool) $this->fields_values['show_total'],
+			'legend_pos'  => (int) $this->fields_values['legend_pos'],
 			'show_links'  => (bool) $this->fields_values['show_links'],
 			'hostid'      => null,
 			'counts'      => null
