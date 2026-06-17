@@ -33,7 +33,7 @@ A Zabbix 7.0 dashboard widget that shows the count of **Items**, **Triggers**, o
 
 ## Installation
 
-1. Copy the `itemshealth/` directory to `<zabbix_root>/modules/`
+1. Copy the `zabbix-widget-host-monitored-entities/` directory to `<zabbix_root>/modules/`
 2. Go to **Administration → General → Modules** and click **Scan directory**
 3. Enable the **Host monitoring entities** module
 4. Add the widget to any host or template dashboard
